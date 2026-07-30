@@ -3,6 +3,7 @@ from tensorflow.keras.applications import EfficientNetB0
 from tensorflow.keras.layers import GlobalAveragePooling2D, Dense
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import ModelCheckpoint
 
 from config import *
 
@@ -28,6 +29,13 @@ model.compile(
     loss="sparse_categorical_crossentropy",
     metrics=["accuracy"]
 )
+checkpoint = ModelCheckpoint(
+    filepath="backend/models/best_model.keras",
+    monitor="val_accuracy",
+    save_best_only=True,
+    mode="max",
+    verbose=1
+)
 
 
 
@@ -37,6 +45,6 @@ print("Starting model training...")
 history = model.fit(
     train_dataset,
     validation_data=test_dataset,
-    epochs=EPOCHS
+    epochs=EPOCHS,
+    callbacks=[checkpoint]
 )
-model.save("backend/models/best_model.keras")
