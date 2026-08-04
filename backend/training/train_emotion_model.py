@@ -5,48 +5,53 @@ from tensorflow.keras.layers import GlobalAveragePooling2D, Dense
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import ModelCheckpoint
-
 from config import *
+
+# -----------------------------
 # Data Augmentation
+# -----------------------------
 data_augmentation = tf.keras.Sequential([
     tf.keras.layers.RandomFlip("horizontal"),
     tf.keras.layers.RandomRotation(0.1),
     tf.keras.layers.RandomZoom(0.1),
 ])
 
-
-# Load pretrained EfficientNet
+# -----------------------------
+# Load EfficientNet
+# -----------------------------
 base_model = EfficientNetB0(
     weights="imagenet",
     include_top=False,
-    input_shape=(224, 224, 3)
+    input_shape=(224,224,3)
 )
 
-# Freeze pretrained layers
-# Freeze most layers
-base_model.trainable = True
+# Phase 1
+base_model.trainable = False
 
-# Freeze all except the last 20 layers
-for layer in base_model.layers[:-20]:
-    layer.trainable = False
-
-# Add our classifier
-inputs = tf.keras.Input(shape=(224, 224, 3))
+# -----------------------------
+# Build Model
+# -----------------------------
+inputs = tf.keras.Input(shape=(224,224,3))
 
 x = data_augmentation(inputs)
 
-x = base_model(x, training=False)
+x = base_model(x)
 
 x = GlobalAveragePooling2D()(x)
 
-output = Dense(NUM_CLASSES, activation="softmax")(x)
+outputs = Dense(NUM_CLASSES, activation="softmax")(x)
 
-model = Model(inputs=inputs, outputs=output)
+model = Model(inputs, outputs)
+
+# -----------------------------
+# Compile Phase 1
+# -----------------------------
 model.compile(
-    optimizer=Adam(learning_rate=1e-5),
+    optimizer=Adam(learning_rate=3e-4),
     loss="sparse_categorical_crossentropy",
     metrics=["accuracy"]
 )
+
 checkpoint = ModelCheckpoint(
     filepath="backend/models/best_model.keras",
     monitor="val_accuracy",
@@ -55,14 +60,40 @@ checkpoint = ModelCheckpoint(
     verbose=1
 )
 
+print("\n========================")
+print("PHASE 1 TRAINING")
+print("========================\n")
 
-
-
-model.summary()
-print("Starting model training...")
-history = model.fit(
+history1 = model.fit(
     train_dataset,
     validation_data=test_dataset,
-    epochs=EPOCHS,
+    epochs=5,
     callbacks=[checkpoint]
 )
+
+# -----------------------------
+# Phase 2 Fine Tuning
+# -----------------------------
+print("\n========================")
+print("PHASE 2 FINE TUNING")
+print("========================\n")
+
+base_model.trainable = True
+
+for layer in base_model.layers[:-20]:
+    layer.trainable = False
+
+model.compile(
+    optimizer=Adam(learning_rate=1e-5),
+    loss="sparse_categorical_crossentropy",
+    metrics=["accuracy"]
+)
+
+history2 = model.fit(
+    train_dataset,
+    validation_data=test_dataset,
+    epochs=10,
+    callbacks=[checkpoint]
+)
+
+print("\nTraining Complete!")

@@ -61,7 +61,10 @@ while True:
         face = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
 
         # Normalize
-        face = face.astype(np.float32) / 255.0
+        from tensorflow.keras.applications.efficientnet import preprocess_input
+
+        face = face.astype("float32")
+        face = preprocess_input(face)
 
         # Add batch dimension
         face = np.expand_dims(face, axis=0)
