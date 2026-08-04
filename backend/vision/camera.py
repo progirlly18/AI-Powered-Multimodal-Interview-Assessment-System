@@ -1,11 +1,12 @@
 from tensorflow.keras.models import load_model
+from tensorflow.keras.applications.efficientnet import preprocess_input
 import numpy as np
 import cv2
 
 # Load trained model
 model = load_model("backend/models/best_model.keras")
 
-# Emotion labels (must match the training folder order)
+# Emotion labels (must match dataset folder order)
 emotion_labels = [
     "Angry",
     "Disgust",
@@ -16,7 +17,7 @@ emotion_labels = [
     "Surprise"
 ]
 
-# Load Haar Cascade face detector
+# Load Haar Cascade
 face_cascade = cv2.CascadeClassifier(
     cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 )
@@ -31,13 +32,16 @@ if not cap.isOpened():
     print("Could not open webcam.")
     exit()
 
+print("Press 'q' to quit.\n")
+
 while True:
+
     ret, frame = cap.read()
 
     if not ret:
         break
 
-    # Detect faces
+    # Convert to grayscale for face detection
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     faces = face_cascade.detectMultiScale(
@@ -49,7 +53,17 @@ while True:
 
     for (x, y, w, h) in faces:
 
-        face = frame[y:y+h, x:x+w]
+        # -----------------------------
+        # Add margin around face
+        # -----------------------------
+        margin = 20
+
+        x1 = max(0, x - margin)
+        y1 = max(0, y - margin)
+        x2 = min(frame.shape[1], x + w + margin)
+        y2 = min(frame.shape[0], y + h + margin)
+
+        face = frame[y1:y2, x1:x2]
 
         if face.size == 0:
             continue
@@ -57,12 +71,10 @@ while True:
         # Resize
         face = cv2.resize(face, (224, 224))
 
-        # IMPORTANT: Convert BGR to RGB
+        # BGR -> RGB
         face = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
 
-        # Normalize
-        from tensorflow.keras.applications.efficientnet import preprocess_input
-
+        # EfficientNet preprocessing
         face = face.astype("float32")
         face = preprocess_input(face)
 
@@ -73,28 +85,32 @@ while True:
         predictions = model.predict(face, verbose=0)[0]
 
         # Print probabilities
-        print("\n----------------------------")
+        print("\n------------------------------")
         for label, prob in zip(emotion_labels, predictions):
             print(f"{label:<10}: {prob:.4f}")
 
         predicted_index = np.argmax(predictions)
-        emotion = emotion_labels[predicted_index]
         confidence = predictions[predicted_index]
+
+        if confidence < 0.45:
+            emotion = "Uncertain"
+        else:
+            emotion = emotion_labels[predicted_index]
 
         # Draw rectangle
         cv2.rectangle(
             frame,
-            (x, y),
-            (x + w, y + h),
+            (x1, y1),
+            (x2, y2),
             (0, 255, 0),
             2
         )
 
-        # Display prediction
+        # Display emotion
         cv2.putText(
             frame,
             f"{emotion} ({confidence:.2f})",
-            (x, y - 10),
+            (x1, y1 - 10),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.8,
             (0, 255, 0),
