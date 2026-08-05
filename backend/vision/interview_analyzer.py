@@ -1,53 +1,152 @@
 import cv2
+import time
+from collections import Counter
 
-from emotion_detector import detect_emotion
-from eye_contact import detect_eye_contact
-from head_pose import detect_head_pose
+from backend.vision.emotion_detector import detect_emotion
+from backend.vision.eye_contact import detect_eye_contact
+from backend.vision.head_pose import detect_head_pose
 
-print("Starting Interview Analyzer...")
 
-cap = cv2.VideoCapture(0)
+def analyze_interview(duration=20):
 
-print("Camera opened:", cap.isOpened())
+    cap = cv2.VideoCapture(0)
 
-if not cap.isOpened():
-    print("ERROR: Could not open webcam.")
-    exit()
+    if not cap.isOpened():
+        raise RuntimeError("Could not open webcam.")
 
-while True:
+    emotions = []
+    eyes = []
+    heads = []
 
-    ret, frame = cap.read()
+    frame_count = 0
+    start_time = time.time()
 
-    print("Frame received:", ret)
+    # Latest predictions shown on screen
+    emotion = "No Face"
+    eye = "No Face"
+    head = "No Face"
+    bbox = None
 
-    if not ret:
-        print("Failed to read frame.")
-        break
+    while True:
 
-    emotion, confidence, bbox = detect_emotion(frame)
-    eye = detect_eye_contact(frame)
-    pose = detect_head_pose(frame)
+        ret, frame = cap.read()
 
-    print(emotion, eye, pose)
+        if not ret:
+            break
 
-    if bbox:
-        x1, y1, x2, y2 = bbox
+        frame_count += 1
 
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0,255,0), 2)
+        # ---------------------------------
+        # Analyze every 10th frame only
+        # ---------------------------------
+        if frame_count % 10 == 0:
 
-    cv2.putText(frame, f"Emotion: {emotion}", (20,40),
-                cv2.FONT_HERSHEY_SIMPLEX,0.7,(0,255,0),2)
+            emotion, confidence, bbox = detect_emotion(frame)
+            eye = detect_eye_contact(frame)
+            head = detect_head_pose(frame)
 
-    cv2.putText(frame, f"Eye: {eye}", (20,70),
-                cv2.FONT_HERSHEY_SIMPLEX,0.7,(255,255,0),2)
+            emotions.append(emotion)
+            eyes.append(eye)
+            heads.append(head)
 
-    cv2.putText(frame, f"Head: {pose}", (20,100),
-                cv2.FONT_HERSHEY_SIMPLEX,0.7,(0,200,255),2)
+        # ---------------------------------
+        # Draw bounding box
+        # ---------------------------------
+        if bbox:
 
-    cv2.imshow("Interview Analyzer", frame)
+            x1, y1, x2, y2 = bbox
 
-    if cv2.waitKey(1) & 0xFF == ord("q"):
-        break
+            cv2.rectangle(
+                frame,
+                (x1, y1),
+                (x2, y2),
+                (0, 255, 0),
+                2
+            )
 
-cap.release()
-cv2.destroyAllWindows()
+        # ---------------------------------
+        # Display latest predictions
+        # ---------------------------------
+        cv2.putText(
+            frame,
+            f"Emotion: {emotion}",
+            (20, 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 255, 0),
+            2
+        )
+
+        cv2.putText(
+            frame,
+            f"Eye: {eye}",
+            (20, 70),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 0),
+            2
+        )
+
+        cv2.putText(
+            frame,
+            f"Head: {head}",
+            (20, 100),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 200, 255),
+            2
+        )
+
+        remaining = max(0, int(duration - (time.time() - start_time)))
+
+        cv2.putText(
+            frame,
+            f"Time Left: {remaining}s",
+            (20, 140),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2
+        )
+
+        cv2.imshow("Interview Analysis", frame)
+
+        # ---------------------------------
+        # Stop after duration seconds
+        # ---------------------------------
+        if time.time() - start_time >= duration:
+            break
+
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+    # ---------------------------------
+    # Handle edge case
+    # ---------------------------------
+    if len(emotions) == 0:
+        return {
+            "emotion": "No Face",
+            "eye": "No Face",
+            "head": "No Face"
+        }
+
+    return {
+
+        "emotion": Counter(emotions).most_common(1)[0][0],
+
+        "eye": Counter(eyes).most_common(1)[0][0],
+
+        "head": Counter(heads).most_common(1)[0][0]
+
+    }
+
+
+if __name__ == "__main__":
+
+    result = analyze_interview(duration=20)
+
+    print("\nFinal Vision Report")
+    print(result)

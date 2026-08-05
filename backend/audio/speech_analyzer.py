@@ -5,114 +5,16 @@ import numpy as np
 import sounddevice as sd
 
 from scipy.io.wavfile import write
-from collections import Counter
 import re
 
-# -----------------------
-# RECORD AUDIO
-# -----------------------
+# --------------------------------------------------
+# Load models ONCE
+# --------------------------------------------------
 
-fs = 16000
-seconds = 10
-
-print("Recording starts in 3 seconds...")
-
-sd.sleep(3000)
-
-print("Speak now...")
-
-recording = sd.rec(
-    int(seconds * fs),
-    samplerate=fs,
-    channels=1,
-    dtype="int16"
-)
-
-sd.wait()
-
-write("sample.wav", fs, recording)
-
-print("Recording complete!")
-
-# -----------------------
-# SPEECH TO TEXT
-# -----------------------
-
-print("\nLoading Whisper...")
-
+print("Loading Whisper...")
 whisper_model = whisper.load_model("base")
 
-result = whisper_model.transcribe("sample.wav")
-
-transcript = result["text"]
-
-print("\nTranscript")
-print("--------------------------------")
-print(transcript)
-
-# -----------------------
-# FILLER WORDS
-# -----------------------
-
-fillers = [
-    "um",
-    "uh",
-    "like",
-    "actually",
-    "basically",
-    "you know",
-    "sort of",
-    "kind of"
-]
-
-print("\nFiller Words")
-print("--------------------------------")
-
-total_fillers = 0
-
-text = transcript.lower()
-
-for filler in fillers:
-
-    count = len(
-        re.findall(
-            r"\b" + re.escape(filler) + r"\b",
-            text
-        )
-    )
-
-    if count:
-
-        print(f"{filler:<15}: {count}")
-
-    total_fillers += count
-
-print("--------------------------------")
-print("Total Fillers:", total_fillers)
-
-# -----------------------
-# WORDS PER MINUTE
-# -----------------------
-
-word_count = len(text.split())
-
-wpm = round(word_count / (seconds / 60))
-
-print("\nSpeech Statistics")
-print("--------------------------------")
-
-print("Words:", word_count)
-
-print("Duration:", seconds, "seconds")
-
-print("Speaking Rate:", wpm, "WPM")
-
-# -----------------------
-# SOUND CLASSIFICATION
-# -----------------------
-
-print("\nLoading YAMNet...")
-
+print("Loading YAMNet...")
 yamnet = hub.load("https://tfhub.dev/google/yamnet/1")
 
 class_map = yamnet.class_map_path().numpy().decode("utf-8")
@@ -120,83 +22,176 @@ class_map = yamnet.class_map_path().numpy().decode("utf-8")
 with open(class_map) as f:
     labels = [line.strip().split(",")[2] for line in f.readlines()[1:]]
 
-waveform, sr = librosa.load("sample.wav", sr=16000)
+print("Audio models loaded successfully!\n")
 
-scores, embeddings, spectrogram = yamnet(waveform)
 
-scores = scores.numpy()
+# --------------------------------------------------
+# Main Function
+# --------------------------------------------------
 
-mean_scores = np.mean(scores, axis=0)
+def analyze_speech(seconds=10):
 
-idx = np.argmax(mean_scores)
+    fs = 16000
 
-sound = labels[idx]
+    print("Recording starts in 3 seconds...")
 
-confidence = float(mean_scores[idx])
+    sd.sleep(3000)
 
-print("\nBackground Sound")
-print("--------------------------------")
+    print("Speak now...")
 
-print(sound)
+    recording = sd.rec(
+        int(seconds * fs),
+        samplerate=fs,
+        channels=1,
+        dtype="int16"
+    )
 
-print("Confidence:", round(confidence,3))
+    sd.wait()
 
-# -----------------------
-# DECISION
-# -----------------------
+    write("sample.wav", fs, recording)
 
-NATURAL = [
-    "Rain",
-    "Thunder",
-    "Wind",
-    "Water",
-    "Ocean",
-    "Bird",
-    "Stream"
+    print("Recording complete!")
+
+    # -----------------------------
+    # Whisper
+    # -----------------------------
+
+    result = whisper_model.transcribe("sample.wav")
+
+    transcript = result["text"]
+
+    # -----------------------------
+    # Fillers
+    # -----------------------------
+
+    fillers = [
+    "um",
+    "uh",
+    "like",
+    "actually",
+    "basically",
+    "you know",
+    "sort of",
+    "kind of",
+    "so"
 ]
 
-SUSPICIOUS = [
-    "Conversation",
-    "Television",
-    "Typing",
-    "Keyboard",
-    "Music"
-]
+    text = transcript.lower()
 
-print("\nEnvironment Decision")
-print("--------------------------------")
+    total_fillers = 0
 
-if any(x.lower() in sound.lower() for x in NATURAL):
+    filler_counts = {}
 
-    print("Natural Background Noise")
+    for filler in fillers:
 
-elif any(x.lower() in sound.lower() for x in SUSPICIOUS):
+        count = len(
+            re.findall(
+                r"\b" + re.escape(filler) + r"\b",
+                text
+            )
+        )
 
-    print("Possible External Assistance")
+        filler_counts[filler] = count
 
-else:
+        total_fillers += count
 
-    print("No suspicious background detected")
+    # -----------------------------
+    # WPM
+    # -----------------------------
 
-# -----------------------
-# SPEECH SCORE
-# -----------------------
+    word_count = len(text.split())
 
-score = 100
+    wpm = round(word_count / (seconds / 60))
 
-score -= total_fillers * 3
+    # -----------------------------
+    # Sound Classification
+    # -----------------------------
 
-if wpm < 90:
+    waveform, sr = librosa.load(
+        "sample.wav",
+        sr=16000
+    )
 
-    score -= 10
+    scores, embeddings, spectrogram = yamnet(waveform)
 
-elif wpm > 170:
+    scores = scores.numpy()
 
-    score -= 10
+    mean_scores = np.mean(scores, axis=0)
 
-score = max(0, score)
+    idx = np.argmax(mean_scores)
 
-print("\nSpeech Score")
-print("--------------------------------")
+    sound = labels[idx]
 
-print(score, "/100")
+    confidence = float(mean_scores[idx])
+
+    NATURAL = [
+        "Rain",
+        "Thunder",
+        "Wind",
+        "Water",
+        "Ocean",
+        "Bird",
+        "Stream"
+    ]
+
+    natural = any(
+        x.lower() in sound.lower()
+        for x in NATURAL
+    )
+
+    # -----------------------------
+    # Speech Score
+    # -----------------------------
+
+    speech_score = 100
+
+    speech_score -= total_fillers * 3
+
+    if wpm < 90:
+        speech_score -= 10
+
+    elif wpm > 170:
+        speech_score -= 10
+
+    speech_score = max(0, speech_score)
+
+    # -----------------------------
+    # Return Everything
+    # -----------------------------
+
+    return {
+
+        "transcript": transcript,
+
+        "fillers": filler_counts,
+
+        "total_fillers": total_fillers,
+
+        "word_count": word_count,
+
+        "wpm": wpm,
+
+        "background": sound,
+
+        "background_confidence": confidence,
+
+        "background_natural": natural,
+
+        "speech_score": speech_score
+
+    }
+
+
+# --------------------------------------------------
+# Test
+# --------------------------------------------------
+
+if __name__ == "__main__":
+
+    result = analyze_speech()
+
+    print("\n========== SPEECH REPORT ==========\n")
+
+    for key, value in result.items():
+
+        print(f"{key}: {value}")
