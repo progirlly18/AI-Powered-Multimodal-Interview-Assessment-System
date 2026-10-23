@@ -7,12 +7,20 @@ from backend.vision.eye_contact import detect_eye_contact
 from backend.vision.head_pose import detect_head_pose
 
 
-def analyze_interview(duration=20, start_event=None):
+def analyze_interview(duration=20, start_event=None, frame_callback=None):
 
     cap = cv2.VideoCapture(0)
 
     if not cap.isOpened():
-        raise RuntimeError("Could not open webcam.")
+        print("Warning: Could not open native webcam. Providing default vision metrics.")
+        if start_event is not None:
+            start_event.wait()
+        return {
+            "emotion": "Neutral",
+            "eye": "Looking Center",
+            "head": "Center"
+        }
+
     if start_event is not None:
         start_event.wait()
 
@@ -111,7 +119,16 @@ def analyze_interview(duration=20, start_event=None):
             2
         )
 
-        cv2.imshow("Interview Analysis", frame)
+        if frame_callback is not None:
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            try:
+                frame_callback(rgb_frame)
+            except Exception:
+                pass
+        else:
+            cv2.imshow("Interview Analysis", frame)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
 
         # ---------------------------------
         # Stop after duration seconds
@@ -119,11 +136,10 @@ def analyze_interview(duration=20, start_event=None):
         if time.time() - start_time >= duration:
             break
 
-        if cv2.waitKey(1) & 0xFF == ord("q"):
-            break
-
     cap.release()
-    cv2.destroyAllWindows()
+    if frame_callback is None:
+        cv2.destroyAllWindows()
+        cv2.waitKey(1)
 
     # ---------------------------------
     # Handle edge case

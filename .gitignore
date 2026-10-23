@@ -231,3 +231,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Scratch & temporary reverse-engineering artifacts
+scratch_*
+target_site.*

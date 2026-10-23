@@ -114,12 +114,11 @@ def analyze_speech(seconds=10, start_event=None):
 
     print("Recording complete!")
 
-    # ----------------------------------------------
-    # Whisper
-    # ----------------------------------------------
+    # Convert in-memory int16 audio to normalized float32 for Whisper (no ffmpeg needed)
+    audio_float = recording.flatten().astype(np.float32) / 32768.0
 
     result = whisper_model.transcribe(
-        "sample.wav"
+        audio_float
     )
 
     transcript = result["text"]

@@ -1,6 +1,27 @@
+# Deep Learning & Vision
 tensorflow
 opencv-python
 mediapipe
-numpy
-matplotlib
+cvzone
 pillow
+
+# Numerical & Data Processing
+numpy
+scipy
+scikit-learn
+matplotlib
+
+# Audio Processing & Speech Recognition
+sounddevice
+librosa
+openai-whisper
+tensorflow-hub
+
+# NLP & Semantic Analysis
+sentence-transformers
+
+# Web Application
+streamlit
+
+# Downgrade if u have updated one
+setuptools<=80.10.2
